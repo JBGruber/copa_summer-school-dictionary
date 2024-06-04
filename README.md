@@ -1,0 +1,15 @@
+# COST Action Training School in Salamanca, Spain - Lexicon-based
+approaches
+
+This repository contains the material for the session “Lexicon-based
+approaches (Johannes Gruber)” at the [COST Action Training School in
+Salamanca,
+Spain](https://www.opinion-network.eu/updates/cost-action-training-school-in-salamanca-spain_2023-11-07)
+on June 14, 9:00-10:30.
+
+To get started, open one of the two notebooks on Google Colab:
+
+- For R users: [![Open In
+  Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/JBGruber/copa_summer-school-dictionary/blob/main/Lexicon-based-approaches-4r.ipynb)
+- For Python users: [![Open In
+  Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/JBGruber/copa_summer-school-dictionary/blob/main/Lexicon-based-approaches-4py.ipynb)
