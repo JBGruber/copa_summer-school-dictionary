@@ -1,0 +1,12 @@
+.Rproj.user/
+.venv/
+.Rhistory
+imdb.pickle.bz2
+imdb.rds
+Lexicon-based-approaches_files/
+.luarc.json
+media/tada.png
+media/stock.png
+notes.md
+imd_loader.py
+langsplitter.r

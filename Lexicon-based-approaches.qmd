@@ -1,0 +1,550 @@
+---
+title: "Lexicon-based Approaches"
+subtitle: "COST Action Training School in Computational Opinion Analysis -- COpA"
+author: "Johannes B. Gruber | VU Amsterdam"
+format:
+  html: default
+  ipynb:
+    embed-resources: true
+    filters:
+      - filter-code-chunks.lua
+execute: 
+  eval: true
+bibliography: references.bib
+---
+
+# Introduction
+## What are Lexicon/Dictionary-based Approaches?
+
+- Lexicon/Dictionary: the words in a language and their meaning
+
+![](media/lexicon.jpeg)
+
+- Lexicon/Dictionary-based approaches: simply count how often pre-defined words appear to infer meaning of text
+- Wordcounts are usualy used to categorise text (e.g., non-/relevant, positive/negative, a-/political)
+- To infer category from count, researchers define mapping function (e.g., N positive terms > N negative terms = positive text) 
+- Like other dictionaries: several forms of the word carry same meaning, expressed through wildcards (e.g., econom*) or regular expressions (e.g., econom.+) (matches economists, economic, and so on)
+
+## Deciding on the Right Method
+
+- See Fig1: ["An overview of text as data methods"](https://doi.org/10.1093/pan/mps028 ) @grimmer_text_2013
+- See FIGURE 1: ["Proposed classification of ACA approaches"](https://pure.uva.nl/ws/files/2639041/168273_495880.pdf) @boumans_taking_2015
+
+
+![](media/optimal_tada_method.png)
+
+## Why choose Lexicon/Dictionary-based Approaches?
+
+- fully transparent even without technical knowledge
+- lightweight to run on enormous data sets
+- Easy to implement it for nonconsumptive research (e.g., Google Books let's you search, but not read/consume books)
+- Valid choice under 3 conditions (@cssbook):
+  1. Variable we want to code is manifest and concrete rather than latent and abstract: names of actors, specific physical objects, specific phrases, etc., rather than feelings, frames, or topics.
+  2. All synonyms to be included must be known beforehand.
+  3. And third, the dictionary entries must not have multiple meanings.
+
+# Examples
+
+```{r setup}
+library(ngramr)
+library(tidyverse)
+library(tidytext)
+```
+
+```{python setup-py}
+import bz2
+import json
+import os
+import pickle
+import re
+import tarfile
+import urllib
+from urllib.parse import quote_plus
+
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import pandas as pd
+import requests
+from nltk.tokenize import TreebankWordTokenizer
+from sklearn import metrics
+```
+
+
+## 1. Non-Consupmtive Research with Google Books
+
+Taken from @duneier_ghetto_2017: Ghetto: The Invention of a Place, the History of an Idea 
+
+**RQ**: How did the meaning of ghetto change over time?
+**Method**: Non-Consumptive Research with the Google Books Ngram Viewer
+
+```{r}
+# install.packages('ngramr')
+ng  <- ngram(
+  phrases = c("ghetto", 
+              "(Warsaw ghetto) + (Jewish ghetto)", 
+              "(black ghetto) + (negro ghetto)"), 
+  year_start = 1920,
+  year_end = 1975,
+  smoothing = 0,
+  count = TRUE
+) |> 
+  group_by(Year) |> 
+  mutate(pct = Count / Count[Phrase == "ghetto"]) |> 
+  filter(Phrase != "ghetto")
+
+ggplot(ng, aes(x = Year, y = pct, colour = Phrase)) +
+  geom_line() +
+  theme(legend.position = "bottom")
+```
+
+```{python}
+# Function to fetch Google Ngram data
+def ngram(phrases, year_start, year_end):
+    term = "%2C".join([quote_plus(phrase) for phrase in phrases])
+    url = f"https://books.google.com/ngrams/json?content={term}&year_start={year_start}&year_end={year_end}&corpus=corpus=en-2019&smoothing=0"
+    resp = requests.get(url)
+    results = json.loads(resp.content)
+
+    # turn results into data frame
+    years = list(range(year_start, year_start + len(results[0]["timeseries"])))
+    df = pd.DataFrame({"Year": years})
+    for item in results:
+        phrase = item["ngram"]
+        df[phrase] = item["timeseries"]
+    return df
+
+
+ngram_df = ngram(
+    phrases=["ghetto", "Warsaw ghetto + Jewish ghetto", "black ghetto + negro ghetto"],
+    year_start=1920,
+    year_end=1975,
+)
+
+# Calculate percentages
+ngram_df["total"] = ngram_df["ghetto"]
+ngram_df["Jewish_ghetto_pct"] = (
+    ngram_df["(Warsaw ghetto + Jewish ghetto)"] / ngram_df["total"]
+)
+ngram_df["Black_ghetto_pct"] = (
+    ngram_df["(black ghetto + negro ghetto)"] / ngram_df["total"]
+)
+
+# Filter out the "ghetto" column and melt the dataframe
+ngram_df = ngram_df[["Year", "Jewish_ghetto_pct", "Black_ghetto_pct"]]
+ngram_df = ngram_df.melt(id_vars=["Year"], var_name="Phrase", value_name="pct")
+
+# Plotting
+plt.figure(figsize=(10, 6))
+for label, df in ngram_df.groupby("Phrase"):
+    plt.plot(df["Year"], df["pct"], label=label)
+
+plt.xlabel("Year")
+plt.ylabel("Percentage")
+plt.title("Term Frequencies from Google Ngrams")
+plt.legend()
+plt.grid(True)
+plt.show()
+```
+
+
+### Exercise 1: Create your own plot
+
+```{r}
+total <- "band"
+ng  <- ngram(
+  phrases = c(total, 
+              "(paper band) + (rubber band)", 
+              "(music band) + (pop band) + (rock band) + (boy band)",
+              "frequency band"), 
+  year_start = 1800,
+  year_end = 2019,
+  smoothing = 0,
+  count = TRUE
+) |> 
+  mutate(Phrase = fct_recode(Phrase, "total" = total)) |> 
+  group_by(Year) |>  
+  mutate(pct = Count / Count[Phrase == "total"]) |> 
+  filter(Phrase != "total")
+
+ggplot(ng, aes(x = Year, y = pct, colour = Phrase)) +
+  geom_line() +
+  theme(legend.position = "bottom")
+```
+
+```{python}
+total = "band"
+ngram_df = ngram(
+    phrases=[
+        total,
+        "(paper band) + (rubber band)",
+        "(music band) + (pop band) + (rock band) + (boy band)",
+        "frequency band",
+    ],
+    year_start=1800,
+    year_end=2019,
+)
+
+ngram_df["total"] = ngram_df.pop(total)
+ngram_df = ngram_df.melt(id_vars=["Year"], var_name="Phrase", value_name="fct")
+ngram_df["pct"] = ngram_df.groupby("Year")["fct"].transform(
+    lambda x: x / x[ngram_df["Phrase"] == "total"].values[0]
+)
+ngram_df = ngram_df[ngram_df["Phrase"] != "total"]
+
+# Plotting
+plt.figure(figsize=(10, 6))
+for label, df in ngram_df.groupby("Phrase"):
+    plt.plot(df["Year"], df["pct"], label=label)
+
+plt.xlabel("Year")
+plt.ylabel("Percentage")
+plt.title("Term Frequencies from Google Ngrams")
+plt.legend()
+plt.grid(True)
+plt.show()
+```
+
+
+## 2. Sentiment Analysis
+
+This part is taken from [@cssbook Chapter 11.2](https://cssbook.net/content/chapter11.html#sec-reviewdataset).
+We first get the data for this, which consists of movie reviews from the IMDB database [@aclimdb].
+
+```{python data-python}
+# you can ignore this part where I download and process the data. But I left it
+# in here in case you find it interesting.
+filename = "imdb.pickle.bz2"
+if os.path.exists(filename):
+    print(f"Using cached file {filename}")
+    with bz2.BZ2File(filename, "r") as zipfile:
+        imdb = pickle.load(zipfile)
+else:
+    url = "https://cssbook.net/d/aclImdb_v1.tar.gz"
+    print(f"Downloading from {url}")
+    fn, _headers = urllib.request.urlretrieve(url, filename=None)
+    t = tarfile.open(fn, mode="r:gz")
+    imdb = []
+    for f in t.getmembers():
+        m = re.match("aclImdb/(\\w+)/(pos|neg)/", f.name)
+        if not m:
+            # skip folder names, other categories
+            continue
+        dataset, label = m.groups()
+        text = t.extractfile(f).read().decode("utf-8")
+        imdb.append({"text": text, "label": label})
+
+    imdb = pd.DataFrame(imdb)
+    imdb["id"] = imdb.index
+    with bz2.BZ2File(filename, "w") as zipfile:
+        pickle.dump(imdb, zipfile)
+```
+
+```{r}
+# you can ignore this part where I download and process the data. But I left it
+# in here in case you find it interesting.
+data_file <- "imdb.rds"
+if (!file.exists(data_file)) {
+  message("Downloading data")
+  temp <- file.path(tempdir(), "imdb") 
+  dir.create(temp, recursive = TRUE)
+  curl::curl_download("http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz",
+                      file.path(temp, "imdb.tar.gz"), quiet = FALSE)
+  untar(file.path(temp, "imdb.tar.gz"), exdir = temp)
+  files <- list.files(temp, 
+                      pattern = ".txt", 
+                      recursive = TRUE,
+                      full.names = TRUE)
+  imdb <- map(files, function(f) {
+    tibble(
+      file = f,
+      text = readLines(f, warn = FALSE)
+    )
+  }, .progress = list(format = "{cli::pb_spin} parsing data {cli::pb_bar} | {cli::pb_eta}")) |> 
+    bind_rows() |> 
+    mutate(label = str_extract(file, "/pos/|/neg/"),
+           label = str_remove_all(label, "/"),
+           label = factor(label)) |>
+    filter(!is.na(label)) |>
+    select(-file) |> 
+    # adding unique IDs for later
+    mutate(id = row_number())
+  saveRDS(imdb, data_file)
+} else {
+  message("Using cached data")
+  imdb <- readRDS(data_file)
+}
+```
+
+We download a dictionary from the @cssbook website, which consists of a list of positive, and one list of negative words.
+
+```{python dict-py}
+#| cache: true
+poswords = "https://cssbook.net/d/positive.txt"
+negwords = "https://cssbook.net/d/negative.txt"
+pos = set(requests.get(poswords).text.split("\n"))
+neg = set(requests.get(negwords).text.split("\n"))
+sentiment_dict = {word: +1 for word in pos}
+sentiment_dict.update({word: -1 for word in neg})
+# just for printing, I convert this to a data frame
+print(pd.DataFrame({'sentiment': list(sentiment_dict.values()), 'word': list(sentiment_dict.keys())}))
+```
+
+```{r dict-r}
+poswords = "https://cssbook.net/d/positive.txt"
+negwords = "https://cssbook.net/d/negative.txt"
+sentiment_dict <- bind_rows(
+  tibble(word = scan(poswords, what = "character"), value = 1),
+  tibble(word = scan(negwords, what = "character"), value = -1)
+)
+sentiment_dict[c(1:5, 5660:5664), ]
+```
+
+We then go through all reviews and construct a sentiment score by looking up each word and adding up its score:
+
+```{python sentsimple-python}
+scores = []
+mytokenizer = TreebankWordTokenizer()
+# For speed, we only take the first 100 reviews
+imdb = imdb[:100].copy()
+for review in imdb["text"]:
+    # This splits up the texts into its individual words
+    words = mytokenizer.tokenize(review)
+    # we look up each word in the sentiment dict
+    # and assign its value (with default 0)
+    scores.append(sum(sentiment_dict.get(word, 0) for word in words))
+
+scores_df = imdb
+scores_df["senti_score"] = scores
+
+print(scores_df)
+```
+
+```{r sentsimple-r}
+scores_df <- imdb |> 
+  # For speed, we only take the first 100 reviews
+  head(100) |> 
+  # This splits up the texts into its individual words
+  unnest_tokens(output = "word", input = "text", drop = FALSE) |> 
+  # We attach the sentiment_dict to the text data.frame. inner_join drops
+  # rows where the word is not in both data.frames
+  inner_join(sentiment_dict, by = "word") |>
+  # For each text, we calcuate the sum of values
+  group_by(id) |> 
+  summarise(senti_score = sum(value),
+            text = head(text, 1))
+
+head(scores_df)
+```
+
+More commonly, people normalize the absolute count of positive and negative words to construct a score that ranges from -1 (most negative sentiment) to +1 (most positive sentiment).
+We can also apply the mapping function now that we discussed earlier:
+
+  N positive terms >= N negative terms = positive text
+  N positive terms < N negative terms = negative text
+
+```{python sentnorm-py}
+scores = []
+category = []
+for review in imdb["text"]:
+    words = mytokenizer.tokenize(review)
+    # this time, we normalise the outcome 
+    score = sum(sentiment_dict.get(word, 0) for word in words) / len(words)
+    scores.append(score)
+    # and assign a sentiment category
+    if score >= 0:
+      category.append("pos")
+    else:
+      category.append("neg")
+    
+    
+scores_df = imdb
+scores_df["senti_score"] = scores
+scores_df["sentiment"] = category
+print(scores_df[["senti_score", "sentiment"]])
+```
+
+
+```{r sentnorm-r}
+scores_df <- imdb |> 
+  # For speed, we only take the first 100 reviews
+  head(100) |>  
+  unnest_tokens(output = "token", input = "text", drop = FALSE) |> 
+  inner_join(sentiment_dict, by = c("token" = "word")) |> 
+  group_by(id) |>
+  # here, we normalise the outcome and assign a sentiment category
+  summarise(senti_score = sum(value) / n(),
+            sentiment = ifelse(senti_score >= 0, "pos", "neg"),
+            text = head(text, 1))
+
+head(scores_df)
+```
+
+We can plot these results to get an impression how often each category was predicted and how strong the senti_score was in these cases.
+
+```{r sent-plot-r}
+scores_df |> 
+  mutate(id = fct_reorder(as.character(id), senti_score)) |> 
+  ggplot(aes(x = senti_score, y = id, fill = sentiment)) +
+  geom_col() +
+  labs(y = NULL, fill = NULL)
+```
+
+
+```{python sent-plot-py}
+scores_df["id"] = scores_df["id"].astype(str)
+scores_sorted = scores_df.sort_values(by="senti_score")
+
+# Create a color column based on the sign of 'senti_score'
+scores_sorted["color"] = scores_sorted["senti_score"].apply(
+    lambda x: "green" if x > 0 else "red"
+)
+
+# Plotting
+fig, ax = plt.subplots()
+ax.barh(scores_sorted["id"], scores_sorted["senti_score"], color=scores_sorted["color"])
+ax.set_xlabel("Sentiment")
+plt.show()
+```
+
+We can validate this approach by comparing the measured sentiment to the real sentiment, as given in the dataset:
+
+```{r}
+validation_df <- scores_df |> 
+  select(-text) |> 
+  left_join(imdb, by = "id")
+
+# have a look at the new data.frame
+validation_df |> 
+  select(id, label, sentiment, senti_score)
+```
+
+```{python}
+scores_df[["label", "sentiment", "senti_score"]]
+```
+
+
+An easy way to validate performance is to calculate how often the prediction and the real sentiment match:
+
+```{r}
+validation_df |> 
+  count(match = label == sentiment)
+```
+
+```{python}
+print(sum(scores_df["label"] != scores_df["sentiment"]), "are predicted incorrectly")
+print(sum(scores_df["label"] == scores_df["sentiment"]), "are predicted correctly")
+```
+
+However, the absolute count of matches, or accuracy, is prone to errors, since it does not take into account chance.
+For example, by taking only the first 100 reviews, we happen to have gather data that has just negative cases:
+
+```{r}
+validation_df |> 
+  count(label)
+```
+
+```{python}
+print(sum(scores_df["label"] == "neg"), "cases have a negative label")
+```
+
+
+So while optimising our mapping function we could accidentally make a wrong adjustment:
+
+```{r}
+scores_df_error <- imdb |> 
+  head(100) |>  
+  unnest_tokens(output = "token", input = "text", drop = FALSE) |> 
+  inner_join(sentiment_dict, by = c("token" = "word")) |> 
+  group_by(id) |>
+  summarise(senti_score = sum(value) / n(),
+            sentiment = ifelse(senti_score >= 0, "neg", "neg"),
+            #                 see the error here --^
+            text = head(text, 1))
+
+scores_df_error |> 
+  select(-text) |> 
+  left_join(imdb, by = "id") |> 
+  count(match = label == sentiment)
+```
+
+```{python}
+scores = []
+category = []
+for review in imdb["text"]:
+    words = mytokenizer.tokenize(review)
+    # this time, we normalise the outcome 
+    score = sum(sentiment_dict.get(word, 0) for word in words) / len(words)
+    scores.append(score)
+    # and assign a sentiment category
+    if score >= 0:
+      category.append("neg")
+    else:
+      category.append("neg")
+    
+    
+scores_df_error = imdb
+scores_df_error["senti_score"] = scores
+scores_df_error["sentiment"] = category
+print(sum(scores_df_error["label"] != scores_df_error["sentiment"]), "are predicted incorrectly")
+print(sum(scores_df_error["label"] == scores_df_error["sentiment"]), "are predicted correctly")
+```
+
+Now suddenly our accuracy is perfect!
+This is why we use a couple of metrics that control for chance:
+
+```{r}
+library(yardstick)
+conf_matrix <- table(validation_df$label, validation_df$sentiment)
+ml_metrics <- metric_set(accuracy, precision, recall, f_meas, kap)
+conf_matrix
+ml_metrics(conf_matrix)
+```
+
+```{python}
+def conf_matrix(df, true, pred):
+  labels = list(set(sorted(df[true].unique()) + sorted(df[pred].unique())))
+  print(pd.DataFrame(
+    metrics.confusion_matrix(df[true], df[pred], labels=labels), 
+    index=[f'true:{labels[0]}', f'true:{labels[1]}'], 
+    columns=[f'pred:{labels[0]}', f'pred:{labels[1]}']
+  ))
+conf_matrix(scores_df, "label", "sentiment")
+print(metrics.classification_report(scores_df["label"], scores_df["sentiment"]))
+```
+
+
+### Exercise 2: Discuss the results
+
+- Based on the example text below, which issues do you see arise from this approach to measuring sentiment?
+
+```{r}
+#| include: false
+#| eval: false
+sentiment_dict2 <- sentiment_dict |> 
+  mutate(bg_colour = ifelse(value > 0, "#2ca25f", "#de2d26")) |> 
+  filter(!word %in% c("f**k", "a+")) |> 
+  mutate(replacement = glue::glue(" <span style='background-color: {bg_colour}'>{word}</span> "),
+         word = glue::glue("\\s{word}\\s"))
+
+out <- stringi::stri_replace_all_regex(
+  imdb$text[136],
+  sentiment_dict2$word,
+  sentiment_dict2$replacement,
+  vectorize_all = FALSE
+)
+tmpf <- paste0(tempfile(), ".html")
+writeLines(out, tmpf)
+utils::browseURL(paste0("file://", tmpf))
+```
+
+![](media/136.png)
+
+
+- This COST action is about opinions. Would you say:
+  a. the provided data contains opinions?
+  b. the approach we looked at is suitable to measure these opinions?
+
+
+<!-- Add more? -->
+<!-- ## 3. Build your own dictionary -->
+
