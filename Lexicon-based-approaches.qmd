@@ -46,9 +46,23 @@ bibliography: references.bib
 # Examples
 
 ```{r setup}
+# just some code to install packages quickly on Colab
+if (Sys.getenv("COLAB_RELEASE_TAG") != "") {
+  download.file("https://github.com/eddelbuettel/r2u/raw/master/inst/scripts/add_cranapt_focal.sh",
+                "add_cranapt_focal.sh")
+  Sys.chmod("add_cranapt_focal.sh", "0755")
+  system("./add_cranapt_focal.sh")
+}
+# install missing packages
+required <- c("ngramr", "tidyverse", "tidytext", "yardstick", "curl", "cli")
+missing <- setdiff(required, installed.packages()[,"Package"])
+install.packages(missing, Ncpus = 4)
+
+# attach required packages
 library(ngramr)
 library(tidyverse)
 library(tidytext)
+library(yardstick)
 ```
 
 ```{python setup-py}
@@ -78,7 +92,6 @@ Taken from @duneier_ghetto_2017: Ghetto: The Invention of a Place, the History o
 **Method**: Non-Consumptive Research with the Google Books Ngram Viewer
 
 ```{r}
-# install.packages('ngramr')
 ng  <- ngram(
   phrases = c("ghetto", 
               "(Warsaw ghetto) + (Jewish ghetto)", 
@@ -275,7 +288,7 @@ if (!file.exists(data_file)) {
 }
 ```
 
-We download a dictionary from the @cssbook website, which consists of a list of positive, and one list of negative words.
+We download a dictionary from the *Computational Analysis of Communication* website (@cssbook), which consists of a list of positive, and one list of negative words.
 
 ```{python dict-py}
 #| cache: true
@@ -313,7 +326,7 @@ for review in imdb["text"]:
     # and assign its value (with default 0)
     scores.append(sum(sentiment_dict.get(word, 0) for word in words))
 
-scores_df = imdb
+scores_df = imdb.copy()
 scores_df["senti_score"] = scores
 
 print(scores_df)
@@ -357,7 +370,7 @@ for review in imdb["text"]:
       category.append("neg")
     
     
-scores_df = imdb
+scores_df = imdb.copy()
 scores_df["senti_score"] = scores
 scores_df["sentiment"] = category
 print(scores_df[["senti_score", "sentiment"]])
@@ -482,7 +495,7 @@ for review in imdb["text"]:
       category.append("neg")
     
     
-scores_df_error = imdb
+scores_df_error = imdb.copy()
 scores_df_error["senti_score"] = scores
 scores_df_error["sentiment"] = category
 print(sum(scores_df_error["label"] != scores_df_error["sentiment"]), "are predicted incorrectly")
@@ -493,7 +506,6 @@ Now suddenly our accuracy is perfect!
 This is why we use a couple of metrics that control for chance:
 
 ```{r}
-library(yardstick)
 conf_matrix <- table(validation_df$label, validation_df$sentiment)
 ml_metrics <- metric_set(accuracy, precision, recall, f_meas, kap)
 conf_matrix
@@ -548,3 +560,4 @@ utils::browseURL(paste0("file://", tmpf))
 <!-- Add more? -->
 <!-- ## 3. Build your own dictionary -->
 
+# References
