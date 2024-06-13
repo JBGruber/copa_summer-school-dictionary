@@ -125,7 +125,7 @@ ngram_df = ngram_df.melt(id_vars=["Year"], var_name="Phrase", value_name="pct")
 # Plotting
 plt.figure(figsize=(10, 6))
 for label, df in ngram_df.groupby("Phrase"):
-    plt.plot(df["Year"], df["pct"], label=label)
+    plt.plot(df["Year"].values, df["pct"].values, label=label)
 
 plt.xlabel("Year")
 plt.ylabel("Percentage")
@@ -183,7 +183,7 @@ ngram_df = ngram_df[ngram_df["Phrase"] != "total"]
 # Plotting
 plt.figure(figsize=(10, 6))
 for label, df in ngram_df.groupby("Phrase"):
-    plt.plot(df["Year"], df["pct"], label=label)
+    plt.plot(df["Year"].values, df["pct"].values, label=label)
 
 plt.xlabel("Year")
 plt.ylabel("Percentage")
