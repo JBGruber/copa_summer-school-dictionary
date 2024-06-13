@@ -49,6 +49,7 @@ from urllib.parse import quote_plus
 
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import seaborn as sns
 import pandas as pd
 import requests
 from nltk.tokenize import TreebankWordTokenizer
@@ -552,7 +553,8 @@ imdb_count
 ```
 
 ```{python}
-imdb['token'] = imdb['text'].apply(word_tokenize)
+mytokenizer = TreebankWordTokenizer()
+imdb['token'] = imdb['text'].apply(mytokenizer.tokenize)
 imdb_long = imdb.explode('token')
 imdb_count = imdb_long.groupby(['label', 'token']).size().reset_index(name='n')
 print(imdb_count.sort_values(by='n', ascending=False))
@@ -588,25 +590,23 @@ imdb_logodds |>
 ```
 
 ```{python}
+# calculate top tokens
 top_tokens = imdb_logodds.groupby('label').apply(
     lambda x: x.nlargest(15, 'log_odds_weighted')
 ).reset_index(drop=True)
 
-# Create a bar plot using seaborn, with separate facets for each label
-plt.figure(figsize=(10, 6))
-bar_plot = sns.barplot(
+# Create a figure and a so-called axis within it
+fig, ax = plt.subplots(figsize=(10,7))
+
+sns.barplot(
     data=top_tokens,
     y='token', x='log_odds_weighted', hue='label',
-    dodge=False
-)
+    dodge=False, ax=ax)
 
-# Remove the legend and set labels
-bar_plot.legend_.remove()
-plt.ylabel(None)
+ax.get_legend().remove()
 
-# Adjust layout to prevent label overlap and display plot
-plt.tight_layout()
-plt.show()
+# Save and/or show the figure. Use ? to get different options for file formats etc
+fig.savefig('test.png',dpi=300)
 ```
 
 # References
