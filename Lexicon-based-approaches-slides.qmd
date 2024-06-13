@@ -1,0 +1,261 @@
+---
+title: "Lexicon-based Approaches"
+subtitle: "COST Action Training School in Computational Opinion Analysis -- COpA"
+author: "Johannes B. Gruber | VU Amsterdam"
+format: 
+  revealjs:
+    embed-resources: true
+    smaller: true
+    scrollable: true
+    incremental: true   
+    logo: https://www.opinion-network.eu/img/opinion_i.gif
+execute: 
+  eval: true
+bibliography: references.bib
+---
+
+# Introduction
+## What are Lexicon/Dictionary-based Approaches?
+
+
+
+
+
+:::: {.columns}
+
+::: {.column width="70%"}
+- Lexicon/Dictionary: the words in a language and their meaning
+- Lexicon/Dictionary-based approaches: simply count how often pre-defined words appear to infer meaning of text
+- Wordcounts are usualy used to categorise text (e.g., non-/relevant, positive/negative, a-/political)
+- To infer category from count, researchers define mapping function (e.g., N positive terms > N negative terms = positive text) 
+- Like 'normal' dictionaries: several forms of the word carry same meaning, expressed through wildcards (e.g., econom*) or regular expressions (e.g., econom.+) (matches economists, economic, and so on)
+:::
+
+::: {.column width="30%"}
+![](media/lexicon.jpeg)
+:::
+
+::::
+
+## Deciding on the Right Method
+
+::: {.fragment .fade-in-then-out .absolute width="70%"}
+![@grimmer_text_2013](media/tada.png)
+:::
+
+::: {.fragment .fade-in-then-out .absolute width="70%"}
+![@boumans_taking_2015](media/stock.png)
+:::
+
+::: {.fragment .fade-in-then-out .absolute width="50%"}
+![@boumans_taking_2015](media/optimal_tada_method.png)
+:::
+
+
+## Why choose Lexicon/Dictionary-based Approaches?
+
+- Fully transparent even without technical knowledge
+- Lightweight to run, even on enormous data sets
+- Easy to implement it for nonconsumptive research (e.g., Google Books let's you search, but not read/consume books)
+- Valid choice under 3 conditions (@cssbook):
+  1. Variable we want to code is <u>manifest</u> and <u>concrete</u> rather than latent and abstract: names of actors, specific physical objects, specific phrases, etc., rather than feelings, frames, or topics.
+  2. All synonyms to be included must be known beforehand.
+  3. And third, the dictionary entries must not have multiple meanings.
+
+# Examples
+
+```{r setup}
+# just some code to install packages quickly on Colab
+if (Sys.getenv("COLAB_RELEASE_TAG") != "") {
+  download.file("https://github.com/eddelbuettel/r2u/raw/master/inst/scripts/add_cranapt_focal.sh",
+                "add_cranapt_focal.sh")
+  Sys.chmod("add_cranapt_focal.sh", "0755")
+  system("./add_cranapt_focal.sh")
+}
+# install missing packages
+required <- c("ngramr", "tidyverse", "tidytext", "yardstick", "curl", "cli")
+missing <- setdiff(required, installed.packages()[,"Package"])
+install.packages(missing, Ncpus = 4)
+
+# attach required packages
+library(ngramr)
+library(tidyverse)
+library(tidytext)
+library(yardstick)
+```
+
+```{python setup-py}
+import bz2
+import json
+import os
+import pickle
+import re
+import tarfile
+import urllib
+from urllib.parse import quote_plus
+
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import pandas as pd
+import requests
+from nltk.tokenize import TreebankWordTokenizer
+from sklearn import metrics
+```
+
+
+## 1. Non-Consupmtive Research with Google Books
+
+Taken from @duneier_ghetto_2017: Ghetto: The Invention of a Place, the History of an Idea 
+
+**RQ**: How did the meaning of ghetto change over time?
+**Method**: Non-Consumptive Research with the Google Books Ngram Viewer
+
+![from @duneier_ghetto_2017, reproduced in @grimmer_text_2022, p. 284]()
+
+
+## Exercise 1: Create your own plot
+
+::: {.panel-tabset}
+
+# R
+
+```{r}
+#| eval: false
+total <- "band"
+ng  <- ngram(
+  phrases = c(total, 
+              "(paper band) + (rubber band)", 
+              "(music band) + (pop band) + (rock band) + (boy band)",
+              "frequency band"), 
+  year_start = 1800,
+  year_end = 2019,
+  smoothing = 0,
+  count = TRUE
+) |> 
+  mutate(Phrase = fct_recode(Phrase, "total" = total)) |> 
+  group_by(Year) |>  
+  mutate(pct = Count / Count[Phrase == "total"]) |> 
+  filter(Phrase != "total")
+
+ggplot(ng, aes(x = Year, y = pct, colour = Phrase)) +
+  geom_line() +
+  theme(legend.position = "bottom")
+```
+
+# Python
+
+```{python}
+#| eval: false
+total = "band"
+ngram_df = ngram(
+    phrases=[
+        total,
+        "(paper band) + (rubber band)",
+        "(music band) + (pop band) + (rock band) + (boy band)",
+        "frequency band",
+    ],
+    year_start=1800,
+    year_end=2019,
+)
+
+ngram_df["total"] = ngram_df.pop(total)
+ngram_df = ngram_df.melt(id_vars=["Year"], var_name="Phrase", value_name="fct")
+ngram_df["pct"] = ngram_df.groupby("Year")["fct"].transform(
+    lambda x: x / x[ngram_df["Phrase"] == "total"].values[0]
+)
+ngram_df = ngram_df[ngram_df["Phrase"] != "total"]
+
+# Plotting
+plt.figure(figsize=(10, 6))
+for label, df in ngram_df.groupby("Phrase"):
+    plt.plot(df["Year"], df["pct"], label=label)
+
+plt.xlabel("Year")
+plt.ylabel("Percentage")
+plt.title("Term Frequencies from Google Ngrams")
+plt.legend()
+plt.grid(True)
+plt.show()
+```
+
+:::
+
+## 2. Sentiment Analysis
+
+This part is taken from [@cssbook Chapter 11.2](https://cssbook.net/content/chapter11.html#sec-reviewdataset).
+
+## Exercise 2: Discuss the results
+
+- Based on the example text below, which issues do you see arise from this approach to measuring sentiment?
+
+```{r}
+#| include: false
+#| eval: false
+sentiment_dict2 <- sentiment_dict |> 
+  mutate(bg_colour = ifelse(value > 0, "#2ca25f", "#de2d26")) |> 
+  filter(!word %in% c("f**k", "a+")) |> 
+  mutate(replacement = glue::glue(" <span style='background-color: {bg_colour}'>{word}</span> "),
+         word = glue::glue("\\s{word}\\s"))
+
+out <- stringi::stri_replace_all_regex(
+  imdb$text[136],
+  sentiment_dict2$word,
+  sentiment_dict2$replacement,
+  vectorize_all = FALSE
+)
+tmpf <- paste0(tempfile(), ".html")
+writeLines(out, tmpf)
+utils::browseURL(paste0("file://", tmpf))
+```
+
+![](media/136.png)
+
+
+- This COST action is about opinions. Would you say:
+  a. the provided data contains opinions?
+  b. the approach we looked at is suitable to measure these opinions?
+
+
+## 3. Build your own dictionary
+
+- Coming up with a comprehensive list of words that describe the cateogries of interest is hard for humans
+- But easy for computers! [@king_computerassisted_2017]
+- You can annotate or otherwise categorise documents and see which words are unique (or much more common) in one set
+- @grimmer_text_2022 call this "fictitious prediction" problem: "The goal isn’t the prediction itself, but identifying the words that are the most effective predictors."
+
+
+# Some Research Examples
+## Dictionary Use for API Data Retrieval
+
+[![@langer_political_2021](media/langer_gruber.png)](https://journals.sagepub.com/doi/suppl/10.1177/1940161220925023/suppl_file/sj-pdf-1-hij-10.1177_1940161220925023.pdf){target="_blank"}
+
+## Actor Identification
+
+![@langer_bring_2018](media/personalization.png)
+
+## Why you might NOT want to use a dictionary?
+
+<center>
+![](media/mentimeter_qr_code.png)
+</center>
+
+## Issues (maybe at end?)
+
+- The more terms we add to our dictionary, the more false positives we will get
+- Building a good dictionary is a lot of work (complexity-resource plot):
+  - Negation and bag-of-word issues ("not good" will be counted as positive + modifiers such as "very good")
+  - "great" should be more positive than "good"
+- Negative image of dictionaries in academia
+  - Many negative examples where dictionaries were applied often outside of the domain they had been developed
+  - Wrong believe that popular off-the-shelf dictionaries do not need validation
+  - Many papers that show that dictionaries do not perform as well as machine learning: e.g. @van_atteveldt_validity_2021; @bailon_signals_2015; @boukes_whats_2020
+
+Now that you know about dictionaries, remember to apply them only under some circumstances:
+
+  (0. When no other method is available, e.g., in data retrieval or nonconsumptive research)
+  1. Variable we want to code is manifest and concrete rather than latent and abstract: names of actors, specific physical objects, specific phrases, etc., rather than feelings, frames, or topics.
+  2. All synonyms to be included must be known beforehand.
+  3. And third, the dictionary entries must not have multiple meanings.
+
+
+# References

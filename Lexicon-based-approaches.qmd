@@ -13,36 +13,6 @@ execute:
 bibliography: references.bib
 ---
 
-# Introduction
-## What are Lexicon/Dictionary-based Approaches?
-
-- Lexicon/Dictionary: the words in a language and their meaning
-
-![](media/lexicon.jpeg)
-
-- Lexicon/Dictionary-based approaches: simply count how often pre-defined words appear to infer meaning of text
-- Wordcounts are usualy used to categorise text (e.g., non-/relevant, positive/negative, a-/political)
-- To infer category from count, researchers define mapping function (e.g., N positive terms > N negative terms = positive text) 
-- Like other dictionaries: several forms of the word carry same meaning, expressed through wildcards (e.g., econom*) or regular expressions (e.g., econom.+) (matches economists, economic, and so on)
-
-## Deciding on the Right Method
-
-- See Fig1: ["An overview of text as data methods"](https://doi.org/10.1093/pan/mps028 ) @grimmer_text_2013
-- See FIGURE 1: ["Proposed classification of ACA approaches"](https://pure.uva.nl/ws/files/2639041/168273_495880.pdf) @boumans_taking_2015
-
-
-![](media/optimal_tada_method.png)
-
-## Why choose Lexicon/Dictionary-based Approaches?
-
-- fully transparent even without technical knowledge
-- lightweight to run on enormous data sets
-- Easy to implement it for nonconsumptive research (e.g., Google Books let's you search, but not read/consume books)
-- Valid choice under 3 conditions (@cssbook):
-  1. Variable we want to code is manifest and concrete rather than latent and abstract: names of actors, specific physical objects, specific phrases, etc., rather than feelings, frames, or topics.
-  2. All synonyms to be included must be known beforehand.
-  3. And third, the dictionary entries must not have multiple meanings.
-
 # Examples
 
 ```{r setup}
@@ -54,7 +24,7 @@ if (Sys.getenv("COLAB_RELEASE_TAG") != "") {
   system("./add_cranapt_focal.sh")
 }
 # install missing packages
-required <- c("ngramr", "tidyverse", "tidytext", "yardstick", "curl", "cli")
+required <- c("ngramr", "tidyverse", "tidytext", "yardstick", "curl", "cli", "tidylo")
 missing <- setdiff(required, installed.packages()[,"Package"])
 install.packages(missing, Ncpus = 4)
 
@@ -63,9 +33,11 @@ library(ngramr)
 library(tidyverse)
 library(tidytext)
 library(yardstick)
+library(tidylo)
 ```
 
 ```{python setup-py}
+!pip install git+https://github.com/lyons7/tidylopy.git
 import bz2
 import json
 import os
@@ -80,7 +52,11 @@ import matplotlib.colors as mcolors
 import pandas as pd
 import requests
 from nltk.tokenize import TreebankWordTokenizer
+from nltk import word_tokenize
 from sklearn import metrics
+import tidylopy.tidylopy
+import nltk
+nltk.download('punkt')
 ```
 
 
@@ -258,25 +234,30 @@ else:
 data_file <- "imdb.rds"
 if (!file.exists(data_file)) {
   message("Downloading data")
+  # download into a temporary folder and unpack archive
   temp <- file.path(tempdir(), "imdb") 
   dir.create(temp, recursive = TRUE)
-  curl::curl_download("http://ai.stanford.edu/~amaas/data/sentiment/aclImdb_v1.tar.gz",
+  curl::curl_download("https://cssbook.net/d/aclImdb_v1.tar.gz",
                       file.path(temp, "imdb.tar.gz"), quiet = FALSE)
   untar(file.path(temp, "imdb.tar.gz"), exdir = temp)
   files <- list.files(temp, 
                       pattern = ".txt", 
                       recursive = TRUE,
                       full.names = TRUE)
+  # read in files
   imdb <- map(files, function(f) {
     tibble(
       file = f,
       text = readLines(f, warn = FALSE)
     )
-  }, .progress = list(format = "{cli::pb_spin} parsing data {cli::pb_bar} | {cli::pb_eta}")) |> 
+  }) |> 
     bind_rows() |> 
     mutate(label = str_extract(file, "/pos/|/neg/"),
            label = str_remove_all(label, "/"),
-           label = factor(label)) |>
+           label = factor(label),
+           dataset = str_extract(file, "/test/|/train/"),
+           dataset = str_remove_all(dataset, "/"),
+           dataset = factor(dataset),) |>
     filter(!is.na(label)) |>
     select(-file) |> 
     # adding unique IDs for later
@@ -318,15 +299,15 @@ We then go through all reviews and construct a sentiment score by looking up eac
 scores = []
 mytokenizer = TreebankWordTokenizer()
 # For speed, we only take the first 100 reviews
-imdb = imdb[:100].copy()
-for review in imdb["text"]:
+imdb_sample = imdb[:100].copy()
+for review in imdb_sample["text"]:
     # This splits up the texts into its individual words
     words = mytokenizer.tokenize(review)
     # we look up each word in the sentiment dict
     # and assign its value (with default 0)
     scores.append(sum(sentiment_dict.get(word, 0) for word in words))
 
-scores_df = imdb.copy()
+scores_df = imdb_sample.copy()
 scores_df["senti_score"] = scores
 
 print(scores_df)
@@ -358,7 +339,7 @@ We can also apply the mapping function now that we discussed earlier:
 ```{python sentnorm-py}
 scores = []
 category = []
-for review in imdb["text"]:
+for review in imdb_sample["text"]:
     words = mytokenizer.tokenize(review)
     # this time, we normalise the outcome 
     score = sum(sentiment_dict.get(word, 0) for word in words) / len(words)
@@ -370,7 +351,7 @@ for review in imdb["text"]:
       category.append("neg")
     
     
-scores_df = imdb.copy()
+scores_df = imdb_sample.copy()
 scores_df["senti_score"] = scores
 scores_df["sentiment"] = category
 print(scores_df[["senti_score", "sentiment"]])
@@ -483,7 +464,7 @@ scores_df_error |>
 ```{python}
 scores = []
 category = []
-for review in imdb["text"]:
+for review in imdb_sample["text"]:
     words = mytokenizer.tokenize(review)
     # this time, we normalise the outcome 
     score = sum(sentiment_dict.get(word, 0) for word in words) / len(words)
@@ -495,7 +476,7 @@ for review in imdb["text"]:
       category.append("neg")
     
     
-scores_df_error = imdb.copy()
+scores_df_error = imdb_sample.copy()
 scores_df_error["senti_score"] = scores
 scores_df_error["sentiment"] = category
 print(sum(scores_df_error["label"] != scores_df_error["sentiment"]), "are predicted incorrectly")
@@ -557,7 +538,75 @@ utils::browseURL(paste0("file://", tmpf))
   b. the approach we looked at is suitable to measure these opinions?
 
 
-<!-- Add more? -->
-<!-- ## 3. Build your own dictionary -->
+## 3. Build your own dictionary
+
+We already know the labels in this data.
+So let's use it to see what would be a good dictionary!
+First, let's count the words and see which ones show up most often in the 'pos' and in the 'neg' data.
+
+```{r}
+imdb_count <- imdb |> 
+  unnest_tokens(output = "token", input = "text") |> 
+  count(label, token, sort = TRUE)
+imdb_count
+```
+
+```{python}
+imdb['token'] = imdb['text'].apply(word_tokenize)
+imdb_long = imdb.explode('token')
+imdb_count = imdb_long.groupby(['label', 'token']).size().reset_index(name='n')
+print(imdb_count.sort_values(by='n', ascending=False))
+```
+
+Okay, this is arguably not helpful at all.
+Let's use a statistical weighting to see not only which words are common, but which ones are showing up statistically much more often in one of the two document groups:
+
+```{python}
+imdb_logodds = tidylopy.tidylopy.get_weighted_log_odds(imdb_count, 'label', 'token', 'n')
+print(imdb_count.sort_values(by='n', ascending=False).head(10))
+```
+
+```{r}
+imdb_logodds <- imdb_count |>
+  bind_log_odds(label, token, n) |> 
+  arrange(-log_odds_weighted)
+imdb_logodds
+```
+
+Now let's plot this!
+
+```{r}
+imdb_logodds |>
+    group_by(label) |>
+    slice_max(log_odds_weighted, n = 15) |>
+    ungroup() |>
+    mutate(token = reorder(token, log_odds_weighted)) |>
+    ggplot(aes(log_odds_weighted, token, fill = label)) +
+    geom_col(show.legend = FALSE) +
+    facet_wrap(vars(label), scales = "free") +
+    labs(y = NULL)
+```
+
+```{python}
+top_tokens = imdb_logodds.groupby('label').apply(
+    lambda x: x.nlargest(15, 'log_odds_weighted')
+).reset_index(drop=True)
+
+# Create a bar plot using seaborn, with separate facets for each label
+plt.figure(figsize=(10, 6))
+bar_plot = sns.barplot(
+    data=top_tokens,
+    y='token', x='log_odds_weighted', hue='label',
+    dodge=False
+)
+
+# Remove the legend and set labels
+bar_plot.legend_.remove()
+plt.ylabel(None)
+
+# Adjust layout to prevent label overlap and display plot
+plt.tight_layout()
+plt.show()
+```
 
 # References
